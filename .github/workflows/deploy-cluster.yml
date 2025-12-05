@@ -1,0 +1,43 @@
+name: Run Ansible Playbooks
+
+on:
+  # Trigger on push to main branch
+  push:
+    branches: [main]
+
+jobs:
+  update-deployment:
+    name: Deploy Cluster changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install Ansible and dependencies
+        run: |
+          pip install --upgrade pip
+          pip install ansible ansible-core
+          ansible-galaxy collection install ansible.posix community.general
+
+      - name: Set up SSH key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.HETZNER_BARE_METAL_GITHUB_ACTIONS_SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          # Add SSH agent configuration
+          eval "$(ssh-agent -s)"
+          ssh-add ~/.ssh/id_ed25519
+
+      - name: Test Ansible connectivity
+        run: |
+          cd ansible
+          ansible ${{ inputs.target_hosts || 'all' }} -m ping -v
