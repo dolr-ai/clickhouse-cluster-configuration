@@ -5,6 +5,10 @@ on:
   push:
     branches: [main]
 
+env:
+  ANSIBLE_HOST_KEY_CHECKING: False
+  ANSIBLE_FORCE_COLOR: True
+
 jobs:
   update-deployment:
     name: Deploy Cluster changes
@@ -22,6 +26,7 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install ansible ansible-core
+          ansible-galaxy collection install community.docker ansible.posix community.general
 
       - name: Set up SSH key
         env:
@@ -38,3 +43,13 @@ jobs:
         run: |
           cd ansible
           ansible ${{ inputs.target_hosts || 'all' }} -m ping -v
+
+      - name: Deploy Cluster
+        run: |
+          cd ansible
+          ansible-playbook -i hosts.yml playbook/deploy-rolling.yml \
+          -e host_env='{"BESZEL_AGENT_TOKEN": "${{ secrets.CLICKHOUSE_KEEPER_1_BESZEL_AGENT_TOKEN }}"}' --limit clickhouse-keeper-1 \
+          -e host_env='{"BESZEL_AGENT_TOKEN": "${{ secrets.CLICKHOUSE_KEEPER_2_BESZEL_AGENT_TOKEN }}"}' --limit clickhouse-keeper-2 \
+          -e host_env='{"BESZEL_AGENT_TOKEN": "${{ secrets.CLICKHOUSE_KEEPER_3_BESZEL_AGENT_TOKEN }}"}' --limit clickhouse-keeper-3 \
+          -e host_env='{"BESZEL_AGENT_TOKEN": "${{ secrets.CLICKHOUSE_REPLICA_1_BESZEL_AGENT_TOKEN }}"}' --limit clickhouse-replica-1 \
+          -e host_env='{"BESZEL_AGENT_TOKEN": "${{ secrets.CLICKHOUSE_REPLICA_2_BESZEL_AGENT_TOKEN }}"}' --limit clickhouse-replica-2

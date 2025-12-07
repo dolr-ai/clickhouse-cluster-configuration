@@ -1,0 +1,183 @@
+---
+- name: Deploy ClickHouse cluster configuration with rolling updates
+  hosts: all
+  serial: 1
+  gather_facts: no
+  vars:
+    remote_user_home: "/root"
+    docker_compose_path: "{{ remote_user_home }}/docker-compose.yml"
+    health_check_retries: 30
+    health_check_delay: 10
+
+  tasks:
+    - name: Display deployment start
+      debug:
+        msg: "Starting deployment for {{ inventory_hostname }}"
+
+    - name: Ensure the target directory exists
+      file:
+        path: "{{ remote_user_home }}"
+        state: directory
+        mode: "0755"
+
+    - name: Copy docker-compose.yml to host
+      copy:
+        src: "../../{{ inventory_hostname }}/docker-compose.yml"
+        dest: "{{ docker_compose_path }}"
+        owner: root
+        group: root
+        mode: "0644"
+        backup: no
+      register: compose_file_copied
+
+    - name: Get current container information
+      community.docker.docker_container_info:
+        name: "{{ item }}"
+      loop: "{{ query('community.docker.docker_containers', project_src=remote_user_home) | default([]) }}"
+      register: container_status_before
+      failed_when: false
+      changed_when: false
+
+    - name: Display current status
+      debug:
+        msg: "Configuration {{ 'changed - will update services' if compose_file_copied.changed else 'unchanged - skipping update' }}"
+
+    - name: Pull latest Docker images
+      community.docker.docker_compose_v2:
+        project_src: "{{ remote_user_home }}"
+        files:
+          - docker-compose.yml
+        pull: yes
+        state: present
+      when: compose_file_copied.changed
+      register: docker_pull_result
+
+    - name: Deploy services with new configuration
+      community.docker.docker_compose_v2:
+        project_src: "{{ remote_user_home }}"
+        files:
+          - docker-compose.yml
+        state: present
+        restarted: yes
+        recreate: yes
+      when: compose_file_copied.changed
+      register: docker_up_result
+
+    - name: Wait for containers to stabilize
+      pause:
+        seconds: "{{ health_check_delay }}"
+      when: compose_file_copied.changed
+
+    - name: Verify services are running
+      community.docker.docker_compose_v2:
+        project_src: "{{ remote_user_home }}"
+        files:
+          - docker-compose.yml
+        state: present
+      register: compose_status
+      changed_when: false
+
+    - name: Get list of running containers
+      community.docker.docker_host_info:
+        containers: yes
+        containers_filters:
+          label: "com.docker.compose.project={{ remote_user_home | basename }}"
+      register: running_containers
+      changed_when: false
+
+    # - name: Display service status
+    #   debug:
+    #     msg: "Containers: {{ running_containers.containers | map(attribute='State') | list }}"
+
+    # - name: Get first container ID for health checks
+    #   shell: "docker compose -f {{ docker_compose_path }} ps -q | head -n1"
+    #   args:
+    #     chdir: "{{ remote_user_home }}"
+    #   register: container_id
+    #   changed_when: false
+    #   when: compose_file_copied.changed
+
+    # - name: Check for ClickHouse specific health (for replica nodes)
+    #   community.docker.docker_container_exec:
+    #     container: "{{ container_id.stdout }}"
+    #     command: clickhouse-client --query "SELECT 1"
+    #   register: clickhouse_health
+    #   when:
+    #     - compose_file_copied.changed
+    #     - "'replica' in inventory_hostname"
+    #     - container_id.stdout | length > 0
+    #   failed_when: false
+    #   changed_when: false
+    #   retries: "{{ health_check_retries }}"
+    #   delay: 2
+    #   until: clickhouse_health.rc == 0
+
+    # - name: Display ClickHouse health status
+    #   debug:
+    #     msg: "ClickHouse is {{ 'healthy' if clickhouse_health.rc == 0 else 'not responding - may still be starting' }}"
+    #   when:
+    #     - compose_file_copied.changed
+    #     - "'replica' in inventory_hostname"
+    #     - clickhouse_health is defined
+
+    # - name: Check for ClickHouse Keeper health (for keeper nodes)
+    #   community.docker.docker_container_exec:
+    #     container: "{{ container_id.stdout }}"
+    #     command: clickhouse-keeper-client -q "ruok"
+    #   register: keeper_health
+    #   when:
+    #     - compose_file_copied.changed
+    #     - "'keeper' in inventory_hostname"
+    #     - container_id.stdout | length > 0
+    #   failed_when: false
+    #   changed_when: false
+    #   retries: "{{ health_check_retries }}"
+    #   delay: 2
+    #   until: keeper_health.rc == 0
+
+    # - name: Display Keeper health status
+    #   debug:
+    #     msg: "ClickHouse Keeper is {{ 'healthy' if keeper_health.rc == 0 else 'not responding - may still be starting' }}"
+    #   when:
+    #     - compose_file_copied.changed
+    #     - "'keeper' in inventory_hostname"
+    #     - keeper_health is defined
+
+    # - name: Get container logs (last 20 lines)
+    #   command: docker compose -f {{ docker_compose_path }} logs --tail=20
+    #   args:
+    #     chdir: "{{ remote_user_home }}"
+    #   register: container_logs
+    #   when: compose_file_copied.changed
+    #   changed_when: false
+
+    # - name: Display recent logs
+    #   debug:
+    #     var: container_logs.stdout_lines
+    #   when: compose_file_copied.changed
+
+    # - name: Verify all services are healthy
+    #   assert:
+    #     that:
+    #       - compose_status is defined
+    #       - compose_status.failed is defined
+    #       - not compose_status.failed
+    #     fail_msg: "Service deployment failed or containers are not running properly"
+    #     success_msg: "All services are running successfully"
+    #   when: compose_file_copied.changed
+
+    # - name: Pause between hosts
+    #   pause:
+    #     seconds: 15
+    #     prompt: "Waiting 15 seconds before proceeding to next host..."
+    #   when:
+    #     - compose_file_copied.changed
+    #     - inventory_hostname != ansible_play_hosts[-1]
+
+    # - name: Final deployment status
+    #   debug:
+    #     msg: |
+    #       ========================================
+    #       Host: {{ inventory_hostname }}
+    #       Status: {{ 'DEPLOYED' if compose_file_copied.changed else 'NO CHANGES' }}
+    #       ========================================
