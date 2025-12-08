@@ -4,7 +4,7 @@
             <s3_disk>
                 <type>s3</type>
                 <endpoint
-                >https://clickhouse-replica-2.fsn1.your-objectstorage.com/</endpoint>
+                >https://fsn1.your-objectstorage.com/clickhouse-replica-2</endpoint>
                 <use_environment_credentials>true</use_environment_credentials>
                 <metadata_path
                 >/var/lib/clickhouse/disks/s3_disk/</metadata_path>
