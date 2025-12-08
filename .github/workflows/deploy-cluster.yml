@@ -47,68 +47,24 @@ jobs:
         run: |
           ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no root@${{ matrix.host.ip }} "echo 'SSH connection successful'"
 
-      - name: Ensure target directory exists
-        run: |
-          ssh -i ~/.ssh/id_ed25519 root@${{ matrix.host.ip }} "mkdir -p /root && chmod 755 /root"
-
-      - name: Check if docker-compose.yml has changed
-        id: check_changes
-        run: |
-          set +e
-          LOCAL_FILE="${{ matrix.host.name }}/docker-compose.yml"
-          REMOTE_FILE="/root/docker-compose.yml"
-
-          # Get local file checksum
-          LOCAL_CHECKSUM=$(sha256sum "$LOCAL_FILE" | awk '{print $1}')
-          echo "Local checksum: $LOCAL_CHECKSUM"
-
-          # Get remote file checksum if it exists
-          REMOTE_CHECKSUM=$(ssh -i ~/.ssh/id_ed25519 root@${{ matrix.host.ip }} "sha256sum $REMOTE_FILE 2>/dev/null | awk '{print \$1}' || echo 'none'")
-          echo "Remote checksum: $REMOTE_CHECKSUM"
-
-          if [ "$LOCAL_CHECKSUM" != "$REMOTE_CHECKSUM" ]; then
-            echo "changed=true" >> $GITHUB_OUTPUT
-            echo "Configuration changed - will update services"
-          else
-            echo "changed=false" >> $GITHUB_OUTPUT
-            echo "Configuration unchanged - skipping update"
-          fi
-
       - name: Copy docker-compose.yml to host
-        if: steps.check_changes.outputs.changed == 'true'
         run: |
           scp -i ~/.ssh/id_ed25519 ${{ matrix.host.name }}/docker-compose.yml root@${{ matrix.host.ip }}:/root/docker-compose.yml
 
       - name: Set file permissions
-        if: steps.check_changes.outputs.changed == 'true'
         run: |
           ssh -i ~/.ssh/id_ed25519 root@${{ matrix.host.ip }} "chmod 644 /root/docker-compose.yml"
 
       - name: Get current container status
-        if: steps.check_changes.outputs.changed == 'true'
         run: |
           echo "Getting current container status..."
-          ssh -i ~/.ssh/id_ed25519 root@${{ matrix.host.ip }} "docker ps -a --filter 'label=com.docker.compose.project=root' || true"
-
-      - name: Pull latest Docker images
-        if: steps.check_changes.outputs.changed == 'true'
-        env:
-          BESZEL_AGENT_TOKEN: ${{ secrets[matrix.host.beszel_agent_token_secret] }}
-        run: |
-          ssh -i ~/.ssh/id_ed25519 root@${{ matrix.host.ip }} "cd /root && BESZEL_AGENT_TOKEN='${BESZEL_AGENT_TOKEN}' docker compose pull"
+          ssh -i ~/.ssh/id_ed25519 root@${{ matrix.host.ip }} "docker ps --all"
 
       - name: Deploy services with new configuration
-        if: steps.check_changes.outputs.changed == 'true'
         env:
           BESZEL_AGENT_TOKEN: ${{ secrets[matrix.host.beszel_agent_token_secret] }}
         run: |
-          ssh -i ~/.ssh/id_ed25519 root@${{ matrix.host.ip }} "cd /root && BESZEL_AGENT_TOKEN='${BESZEL_AGENT_TOKEN}' docker compose up -d --force-recreate"
-
-      - name: Wait for containers to stabilize
-        if: steps.check_changes.outputs.changed == 'true'
-        run: |
-          echo "Waiting 10 seconds for containers to stabilize..."
-          sleep 10
+          ssh -i ~/.ssh/id_ed25519 root@${{ matrix.host.ip }} "cd /root && docker compose pull && BESZEL_AGENT_TOKEN='${BESZEL_AGENT_TOKEN}' docker compose up --wait"
 
       - name: Verify services are running
         if: steps.check_changes.outputs.changed == 'true'
@@ -136,9 +92,3 @@ jobs:
           echo "Services verification successful"
           docker compose ps
           EOF
-
-      - name: Display deployment completion
-        run: |
-          echo "========================================"
-          echo "Deployment completed for ${{ matrix.host.name }}"
-          echo "========================================"
