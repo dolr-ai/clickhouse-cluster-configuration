@@ -64,9 +64,9 @@ jobs:
         env:
           BESZEL_AGENT_TOKEN: ${{ secrets[matrix.host.beszel_agent_token_secret] }}
         run: |
-          ssh -i ~/.ssh/id_ed25519 root@${{ matrix.host.ip }} "cd /root &&
-          docker compose pull &&
-          BESZEL_AGENT_TOKEN='${BESZEL_AGENT_TOKEN}' docker compose up --wait --force-recreate"
+          ssh -i ~/.ssh/id_ed25519 root@${{ matrix.host.ip }} "cd /root;
+          docker compose pull;
+          BESZEL_AGENT_TOKEN='${BESZEL_AGENT_TOKEN}' docker compose up --wait --force-recreate;"
 
       - name: Verify services are running
         if: steps.check_changes.outputs.changed == 'true'
