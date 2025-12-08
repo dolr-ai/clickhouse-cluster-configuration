@@ -1,0 +1,66 @@
+<clickhouse>
+    <logger>
+        <level>debug</level>
+        <log>/var/log/clickhouse-server/clickhouse-server.log</log>
+        <errorlog
+        >/var/log/clickhouse-server/clickhouse-server.err.log</errorlog>
+        <size>1000M</size>
+        <count>3</count>
+    </logger>
+
+    <display_name>ClickHouse Replica 2</display_name>
+
+    <listen_host>0.0.0.0</listen_host>
+    <http_port>8123</http_port>
+    <tcp_port>9000</tcp_port>
+
+    <user_directories>
+        <users_xml>
+            <path>users.xml</path>
+        </users_xml>
+        <local_directory>
+            <path>/var/lib/clickhouse/access/</path>
+        </local_directory>
+    </user_directories>
+
+    <distributed_ddl>
+        <path>/clickhouse/task_queue/ddl</path>
+    </distributed_ddl>
+
+    <remote_servers>
+        <cluster_yral>
+            <shard>
+                <internal_replication>true</internal_replication>
+                <replica>
+                    <host>94.130.13.115</host>
+                    <port>9000</port>
+                </replica>
+                <replica>
+                    <host>88.99.151.102</host>
+                    <port>9000</port>
+                </replica>
+            </shard>
+        </cluster_yral>
+    </remote_servers>
+
+    <zookeeper>
+        <node>
+            <host>88.99.97.49</host>
+            <port>9181</port>
+        </node>
+        <node>
+            <host>138.201.137.181</host>
+            <port>9181</port>
+        </node>
+        <node>
+            <host>136.243.150.84</host>
+            <port>9181</port>
+        </node>
+    </zookeeper>
+
+    <macros>
+        <shard>01</shard>
+        <replica>02</replica>
+        <cluster>cluster_yral</cluster>
+    </macros>
+</clickhouse>

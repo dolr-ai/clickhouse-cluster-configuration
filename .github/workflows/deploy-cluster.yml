@@ -47,13 +47,13 @@ jobs:
         run: |
           ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no root@${{ matrix.host.ip }} "echo 'SSH connection successful'"
 
-      - name: Copy docker-compose.yml to host
+      - name: Copy hostname folder contents to host
         run: |
-          scp -i ~/.ssh/id_ed25519 ${{ matrix.host.name }}/docker-compose.yml root@${{ matrix.host.ip }}:/root/docker-compose.yml
+          scp -r -i ~/.ssh/id_ed25519 ${{ matrix.host.name }}/* root@${{ matrix.host.ip }}:/root/
 
       - name: Set file permissions
         run: |
-          ssh -i ~/.ssh/id_ed25519 root@${{ matrix.host.ip }} "chmod 644 /root/docker-compose.yml"
+          ssh -i ~/.ssh/id_ed25519 root@${{ matrix.host.ip }} "chmod -R 644 /root/docker-compose.yml /root/clickhouse 2>/dev/null || true"
 
       - name: Get current container status
         run: |

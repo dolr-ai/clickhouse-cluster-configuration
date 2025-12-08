@@ -17,3 +17,14 @@ services:
       HUB_URL: https://beszel.yral.com
     security_opt:
       - apparmor:unconfined
+
+  clickhouse-keeper:
+    image: clickhouse/clickhouse-keeper:latest-alpine
+    container_name: clickhouse-keeper
+    hostname: clickhouse-keeper-3
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./clickhouse/keeper_config.xml:/etc/clickhouse-keeper/keeper_config.xml:ro
+      - ./clickhouse/data:/var/lib/clickhouse
+      - ./clickhouse/logs:/var/log/clickhouse-keeper
