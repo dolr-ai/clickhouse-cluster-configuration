@@ -61,7 +61,6 @@
         files:
           - docker-compose.yml
         state: present
-        restarted: true
         recreate: always
       environment: "{{ host_env }}"
       when: compose_file_copied.changed
