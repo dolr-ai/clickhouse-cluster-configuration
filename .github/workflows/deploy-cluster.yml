@@ -1,32 +1,38 @@
-name: Run Ansible Playbooks
+name: Deploy ClickHouse Cluster
 
 on:
-  # Trigger on push to main branch
   push:
     branches: [main]
 
-env:
-  ANSIBLE_HOST_KEY_CHECKING: False
-  ANSIBLE_FORCE_COLOR: True
-
 jobs:
-  update-deployment:
-    name: Deploy Cluster changes
+  deploy-cluster:
+    name: Deploy Cluster with Rolling Updates
     runs-on: ubuntu-latest
     timeout-minutes: 90
+
+    strategy:
+      matrix:
+        host:
+          - name: clickhouse-keeper-1
+            ip: 88.99.97.49
+            beszel_agent_token_secret: CLICKHOUSE_KEEPER_1_BESZEL_AGENT_TOKEN
+          - name: clickhouse-keeper-2
+            ip: 138.201.137.181
+            beszel_agent_token_secret: CLICKHOUSE_KEEPER_2_BESZEL_AGENT_TOKEN
+          - name: clickhouse-keeper-3
+            ip: 136.243.150.84
+            beszel_agent_token_secret: CLICKHOUSE_KEEPER_3_BESZEL_AGENT_TOKEN
+          - name: clickhouse-replica-1
+            ip: 94.130.13.115
+            beszel_agent_token_secret: CLICKHOUSE_REPLICA_1_BESZEL_AGENT_TOKEN
+          - name: clickhouse-replica-2
+            ip: 88.99.151.102
+            beszel_agent_token_secret: CLICKHOUSE_REPLICA_2_BESZEL_AGENT_TOKEN
+      max-parallel: 1
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-
-      - name: Install Ansible and dependencies
-        run: |
-          pip install --upgrade pip
-          pip install ansible ansible-core
-          ansible-galaxy collection install community.docker ansible.posix community.general
 
       - name: Set up SSH key
         env:
@@ -35,46 +41,101 @@ jobs:
           mkdir -p ~/.ssh
           echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          # Add SSH agent configuration
-          eval "$(ssh-agent -s)"
-          ssh-add ~/.ssh/id_ed25519
+          ssh-keyscan -H ${{ matrix.host.ip }} >> ~/.ssh/known_hosts
 
-      - name: Test Ansible connectivity
+      - name: Test SSH connectivity
         run: |
-          cd ansible
-          ansible ${{ inputs.target_hosts || 'all' }} -m ping -v
+          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no root@${{ matrix.host.ip }} "echo 'SSH connection successful'"
 
-      - name: Deploy clickhouse-keeper-1
+      - name: Ensure target directory exists
         run: |
-          cd ansible
-          ansible-playbook -i hosts.yml playbook/deploy-rolling.yml \
-          -e '{"host_env":{"BESZEL_AGENT_TOKEN":"${{ secrets.CLICKHOUSE_KEEPER_1_BESZEL_AGENT_TOKEN }}"}}' \
-          --limit clickhouse-keeper-1
+          ssh -i ~/.ssh/id_ed25519 root@${{ matrix.host.ip }} "mkdir -p /root && chmod 755 /root"
 
-      - name: Deploy clickhouse-keeper-2
+      - name: Check if docker-compose.yml has changed
+        id: check_changes
         run: |
-          cd ansible
-          ansible-playbook -i hosts.yml playbook/deploy-rolling.yml \
-          -e '{"host_env":{"BESZEL_AGENT_TOKEN":"${{ secrets.CLICKHOUSE_KEEPER_2_BESZEL_AGENT_TOKEN }}"}}' \
-          --limit clickhouse-keeper-2
+          set +e
+          LOCAL_FILE="${{ matrix.host.name }}/docker-compose.yml"
+          REMOTE_FILE="/root/docker-compose.yml"
 
-      - name: Deploy clickhouse-keeper-3
-        run: |
-          cd ansible
-          ansible-playbook -i hosts.yml playbook/deploy-rolling.yml \
-          -e '{"host_env":{"BESZEL_AGENT_TOKEN":"${{ secrets.CLICKHOUSE_KEEPER_3_BESZEL_AGENT_TOKEN }}"}}' \
-          --limit clickhouse-keeper-3
+          # Get local file checksum
+          LOCAL_CHECKSUM=$(sha256sum "$LOCAL_FILE" | awk '{print $1}')
+          echo "Local checksum: $LOCAL_CHECKSUM"
 
-      - name: Deploy clickhouse-replica-1
-        run: |
-          cd ansible
-          ansible-playbook -i hosts.yml playbook/deploy-rolling.yml \
-          -e '{"host_env":{"BESZEL_AGENT_TOKEN":"${{ secrets.CLICKHOUSE_REPLICA_1_BESZEL_AGENT_TOKEN }}"}}' \
-          --limit clickhouse-replica-1
+          # Get remote file checksum if it exists
+          REMOTE_CHECKSUM=$(ssh -i ~/.ssh/id_ed25519 root@${{ matrix.host.ip }} "sha256sum $REMOTE_FILE 2>/dev/null | awk '{print \$1}' || echo 'none'")
+          echo "Remote checksum: $REMOTE_CHECKSUM"
 
-      - name: Deploy clickhouse-replica-2
+          if [ "$LOCAL_CHECKSUM" != "$REMOTE_CHECKSUM" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "Configuration changed - will update services"
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "Configuration unchanged - skipping update"
+          fi
+
+      - name: Copy docker-compose.yml to host
+        if: steps.check_changes.outputs.changed == 'true'
         run: |
-          cd ansible
-          ansible-playbook -i hosts.yml playbook/deploy-rolling.yml \
-          -e '{"host_env":{"BESZEL_AGENT_TOKEN":"${{ secrets.CLICKHOUSE_REPLICA_2_BESZEL_AGENT_TOKEN }}"}}' \
-          --limit clickhouse-replica-2
+          scp -i ~/.ssh/id_ed25519 ${{ matrix.host.name }}/docker-compose.yml root@${{ matrix.host.ip }}:/root/docker-compose.yml
+
+      - name: Set file permissions
+        if: steps.check_changes.outputs.changed == 'true'
+        run: |
+          ssh -i ~/.ssh/id_ed25519 root@${{ matrix.host.ip }} "chmod 644 /root/docker-compose.yml"
+
+      - name: Get current container status
+        if: steps.check_changes.outputs.changed == 'true'
+        run: |
+          echo "Getting current container status..."
+          ssh -i ~/.ssh/id_ed25519 root@${{ matrix.host.ip }} "docker ps -a --filter 'label=com.docker.compose.project=root' || true"
+
+      - name: Pull latest Docker images
+        if: steps.check_changes.outputs.changed == 'true'
+        env:
+          BESZEL_AGENT_TOKEN: ${{ secrets[matrix.host.beszel_agent_token_secret] }}
+        run: |
+          ssh -i ~/.ssh/id_ed25519 root@${{ matrix.host.ip }} "cd /root && BESZEL_AGENT_TOKEN='${BESZEL_AGENT_TOKEN}' docker compose pull"
+
+      - name: Deploy services with new configuration
+        if: steps.check_changes.outputs.changed == 'true'
+        env:
+          BESZEL_AGENT_TOKEN: ${{ secrets[matrix.host.beszel_agent_token_secret] }}
+        run: |
+          ssh -i ~/.ssh/id_ed25519 root@${{ matrix.host.ip }} "cd /root && BESZEL_AGENT_TOKEN='${BESZEL_AGENT_TOKEN}' docker compose up -d --force-recreate"
+
+      - name: Wait for containers to stabilize
+        if: steps.check_changes.outputs.changed == 'true'
+        run: |
+          echo "Waiting 10 seconds for containers to stabilize..."
+          sleep 10
+
+      - name: Verify services are running
+        if: steps.check_changes.outputs.changed == 'true'
+        run: |
+          echo "Verifying services are running..."
+          ssh -i ~/.ssh/id_ed25519 root@${{ matrix.host.ip }} bash << 'EOF'
+          set -e
+          cd /root
+
+          # Check if containers are running
+          RUNNING_CONTAINERS=$(docker compose ps --format json | jq -r 'select(.State == "running") | .Name' | wc -l)
+          TOTAL_CONTAINERS=$(docker compose ps --format json | wc -l)
+
+          echo "Running containers: $RUNNING_CONTAINERS / $TOTAL_CONTAINERS"
+
+          if [ "$RUNNING_CONTAINERS" -eq 0 ]; then
+            echo "ERROR: No containers are running!"
+            docker compose ps
+            exit 1
+          fi
+
+          echo "Services verification successful"
+          docker compose ps
+          EOF
+
+      - name: Display deployment completion
+        run: |
+          echo "========================================"
+          echo "Deployment completed for ${{ matrix.host.name }}"
+          echo "========================================"
