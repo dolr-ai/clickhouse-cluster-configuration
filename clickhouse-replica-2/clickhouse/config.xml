@@ -45,6 +45,9 @@
         </cluster_yral>
     </remote_servers>
 
+    <!-- Parallel replicas configuration -->
+    <cluster_for_parallel_replicas>cluster_yral</cluster_for_parallel_replicas>
+
     <zookeeper>
         <node>
             <host>88.99.97.49</host>
