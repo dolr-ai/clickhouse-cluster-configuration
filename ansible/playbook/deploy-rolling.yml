@@ -8,6 +8,7 @@
     docker_compose_path: "{{ remote_user_home }}/docker-compose.yml"
     health_check_retries: 30
     health_check_delay: 10
+    host_env: {}
 
   tasks:
     - name: Display deployment start
@@ -48,9 +49,9 @@
         project_src: "{{ remote_user_home }}"
         files:
           - docker-compose.yml
-        pull: yes
+        pull: always
         state: present
-      environment: "{{ host_env | default({}) }}"
+      environment: "{{ host_env }}"
       when: compose_file_copied.changed
       register: docker_pull_result
 
@@ -60,9 +61,9 @@
         files:
           - docker-compose.yml
         state: present
-        restarted: yes
-        recreate: yes
-      environment: "{{ host_env | default({}) }}"
+        restarted: true
+        recreate: always
+      environment: "{{ host_env }}"
       when: compose_file_copied.changed
       register: docker_up_result
 
@@ -77,7 +78,7 @@
         files:
           - docker-compose.yml
         state: present
-      environment: "{{ host_env | default({}) }}"
+      environment: "{{ host_env }}"
       register: compose_status
       changed_when: false
 

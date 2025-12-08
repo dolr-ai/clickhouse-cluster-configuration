@@ -48,33 +48,33 @@ jobs:
         run: |
           cd ansible
           ansible-playbook -i hosts.yml playbook/deploy-rolling.yml \
-          -e host_env='{"BESZEL_AGENT_TOKEN": "${{ secrets.CLICKHOUSE_KEEPER_1_BESZEL_AGENT_TOKEN }}"}' \
+          -e '{"host_env":{"BESZEL_AGENT_TOKEN":"${{ secrets.CLICKHOUSE_KEEPER_1_BESZEL_AGENT_TOKEN }}"}}' \
           --limit clickhouse-keeper-1
 
       - name: Deploy clickhouse-keeper-2
         run: |
           cd ansible
           ansible-playbook -i hosts.yml playbook/deploy-rolling.yml \
-          -e host_env='{"BESZEL_AGENT_TOKEN": "${{ secrets.CLICKHOUSE_KEEPER_2_BESZEL_AGENT_TOKEN }}"}' \
+          -e '{"host_env":{"BESZEL_AGENT_TOKEN":"${{ secrets.CLICKHOUSE_KEEPER_2_BESZEL_AGENT_TOKEN }}"}}' \
           --limit clickhouse-keeper-2
 
       - name: Deploy clickhouse-keeper-3
         run: |
           cd ansible
           ansible-playbook -i hosts.yml playbook/deploy-rolling.yml \
-          -e host_env='{"BESZEL_AGENT_TOKEN": "${{ secrets.CLICKHOUSE_KEEPER_3_BESZEL_AGENT_TOKEN }}"}' \
+          -e '{"host_env":{"BESZEL_AGENT_TOKEN":"${{ secrets.CLICKHOUSE_KEEPER_3_BESZEL_AGENT_TOKEN }}"}}' \
           --limit clickhouse-keeper-3
 
       - name: Deploy clickhouse-replica-1
         run: |
           cd ansible
           ansible-playbook -i hosts.yml playbook/deploy-rolling.yml \
-          -e host_env='{"BESZEL_AGENT_TOKEN": "${{ secrets.CLICKHOUSE_REPLICA_1_BESZEL_AGENT_TOKEN }}"}' \
+          -e '{"host_env":{"BESZEL_AGENT_TOKEN":"${{ secrets.CLICKHOUSE_REPLICA_1_BESZEL_AGENT_TOKEN }}"}}' \
           --limit clickhouse-replica-1
 
       - name: Deploy clickhouse-replica-2
         run: |
           cd ansible
           ansible-playbook -i hosts.yml playbook/deploy-rolling.yml \
-          -e host_env='{"BESZEL_AGENT_TOKEN": "${{ secrets.CLICKHOUSE_REPLICA_2_BESZEL_AGENT_TOKEN }}"}' \
+          -e '{"host_env":{"BESZEL_AGENT_TOKEN":"${{ secrets.CLICKHOUSE_REPLICA_2_BESZEL_AGENT_TOKEN }}"}}' \
           --limit clickhouse-replica-2
