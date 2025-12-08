@@ -112,19 +112,22 @@ jobs:
 
       - name: Verify services are running
         if: steps.check_changes.outputs.changed == 'true'
+        env:
+          BESZEL_AGENT_TOKEN: ${{ secrets[matrix.host.beszel_agent_token_secret] }}
         run: |
           echo "Verifying services are running..."
-          ssh -i ~/.ssh/id_ed25519 root@${{ matrix.host.ip }} bash << 'EOF'
+          ssh -i ~/.ssh/id_ed25519 root@${{ matrix.host.ip }} bash << EOF
           set -e
           cd /root
+          export BESZEL_AGENT_TOKEN="${BESZEL_AGENT_TOKEN}"
 
-          # Check if containers are running
-          RUNNING_CONTAINERS=$(docker compose ps --format json | jq -r 'select(.State == "running") | .Name' | wc -l)
-          TOTAL_CONTAINERS=$(docker compose ps --format json | wc -l)
+          # Check if containers are running (without jq)
+          RUNNING_CONTAINERS=\$(docker compose ps --filter "status=running" --format "{{.Name}}" | wc -l)
+          TOTAL_CONTAINERS=\$(docker compose ps --format "{{.Name}}" | wc -l)
 
-          echo "Running containers: $RUNNING_CONTAINERS / $TOTAL_CONTAINERS"
+          echo "Running containers: \$RUNNING_CONTAINERS / \$TOTAL_CONTAINERS"
 
-          if [ "$RUNNING_CONTAINERS" -eq 0 ]; then
+          if [ "\$RUNNING_CONTAINERS" -eq 0 ]; then
             echo "ERROR: No containers are running!"
             docker compose ps
             exit 1
