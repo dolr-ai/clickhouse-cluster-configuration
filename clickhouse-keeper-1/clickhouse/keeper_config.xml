@@ -1,6 +1,6 @@
 <clickhouse>
     <logger>
-        <level>information</level>
+        <level>debug</level>
         <log>/var/log/clickhouse-keeper/clickhouse-keeper.log</log>
         <errorlog
         >/var/log/clickhouse-keeper/clickhouse-keeper.err.log</errorlog>

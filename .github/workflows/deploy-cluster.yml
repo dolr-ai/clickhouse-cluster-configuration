@@ -53,7 +53,15 @@ jobs:
 
       - name: Set file permissions
         run: |
-          ssh -i ~/.ssh/id_ed25519 root@${{ matrix.host.ip }} "chmod -R 644 /root/docker-compose.yml /root/clickhouse 2>/dev/null || true"
+          ssh -i ~/.ssh/id_ed25519 root@${{ matrix.host.ip }} "
+          # Set proper ownership for ClickHouse data directories (ClickHouse runs as UID:GID 101:101)
+          chown -R 101:101 /root/clickhouse/data /root/clickhouse/logs 2>/dev/null || true
+          # Set directory permissions
+          chmod -R 755 /root/clickhouse 2>/dev/null || true
+          # Set config file permissions to read-only
+          chmod 644 /root/docker-compose.yml 2>/dev/null || true
+          chmod 644 /root/clickhouse/*.xml 2>/dev/null || true
+          "
 
       - name: Get current container status
         run: |
