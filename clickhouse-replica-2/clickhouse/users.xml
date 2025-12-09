@@ -19,7 +19,7 @@
 
     <users>
         <default>
-            <!-- <password remove="1" /> -->
+            <password remove="1" />
             <access_management>1</access_management>
             <profile>default</profile>
             <networks>
@@ -31,13 +31,13 @@
             <show_named_collections>1</show_named_collections>
             <show_named_collections_secrets>1</show_named_collections_secrets>
 
-            <!-- <ssh_keys>
+            <ssh_keys>
                 <ssh_key>
                     <type>ssh-ed25519</type>
                     <base64_key
                     >AAAAC3NzaC1lZDI1NTE5AAAAIEk4PvXhngz7NQRu/OYThH+gH/BLRzncjiAMNo16NCHV</base64_key>
                 </ssh_key>
-            </ssh_keys> -->
+            </ssh_keys>
         </default>
     </users>
 
