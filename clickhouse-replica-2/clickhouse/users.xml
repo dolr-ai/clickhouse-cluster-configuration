@@ -19,6 +19,7 @@
 
     <users>
         <default>
+            <password remove="1" />
             <access_management>1</access_management>
             <profile>default</profile>
             <networks>
